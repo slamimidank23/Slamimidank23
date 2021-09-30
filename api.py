@@ -1,146 +1,64 @@
-import json
-from requests_toolbelt.multipart.encoder import MultipartEncoder
-import requests
+
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 
+def test_show_my_pets(test):
+    # add email
+    test.find_element_by_id('email').send_keys('su')
+    # add password
+    test.find_element_by_id('pass').send_keys('123')
+    # click submit button
+    test.find_element_by_css_selector('button[type="submit"]').click()
 
-class PetFriends:
-    def __init__(self):
-        self.base_url = "https://petfriends1.herokuapp.com/"
+    WebDriverWait(test, 5).until(EC.text_to_be_present_in_element((By.TAG_NAME, "h1"),
+                                                                     'PetFriends'))  
 
-    def get_api_key(self, email, password):
-        headers = {
-            'email': email,
-            'password': password
-        }
-        res = requests.get(self.base_url+'api/key', headers=headers)
-        status = res.status_code
-        result = ""
-        try:
-            result = res.json()
-        except:
-            result = res.text
-        return status, result
+    
+    WebDriverWait(test, 10).until(EC.element_to_be_clickable((By.XPATH, '//li/a[@href="/my_pets"]')))
+    test.find_element_by_xpath('//li/a[@href="/my_pets"]').click()
+    
+    assert test.title == "PetFriends: My Pets"  
+    
 
-    def get_api_key_password_is_none(self, email):
-        headers = {
-            'email': email
-        }
-        res = requests.get(self.base_url+'api/key', headers=headers)
-        status = res.status_code
-        result = ""
-        try:
-            result = res.json()
-        except:
-            result = res.text
-        return status, result
+    
+    WebDriverWait(test, 10).until(EC.visibility_of_element_located(
+        (By.CSS_SELECTOR, "table.table-hover tbody > tr")))  
+    pet_number = len(test.find_elements_by_css_selector("table.table-hover tbody > tr"))
+    images = test.find_elements_by_css_selector("tbody tr th img")
+    names = test.find_elements_by_xpath("//div[@id='all_my_pets']/table/tbody/tr/td[1]")
+    breeds = test.find_elements_by_xpath("//div[@id='all_my_pets']/table/tbody/tr/td[2]")
+    ages = test.find_elements_by_xpath("//div[@id='all_my_pets']/table/tbody/tr/td[3]")
 
-    def get_api_key_email_is_none(self, password):
-        headers = {
-            'password': password
-        }
-        res = requests.get(self.base_url+'api/key', headers=headers)
-        status = res.status_code
-        result = ""
-        try:
-            result = res.json()
-        except:
-            result = res.text
-        return status, result
+    images_counter = 0
+    names_set = set()
+    pets_list = set()
+    for i in range(pet_number):
 
-    def get_list_of_pets(self, auth_key, filter):
-        headers = {'auth_key': auth_key['key']}
-        filter = {'filter': filter}
+        names_set.add(names[i].text)
+        pet = (names[i].text, breeds[i].text, ages[i].text)
+        pets_list.add(pet)
 
-        res = requests.get(self.base_url+'api/pets', headers=headers, params=filter)
-        status = res.status_code
-        result = ""
-        try:
-            result = res.json()
-        except:
-            result = res.text
-        return status, result
+        if images[i].get_attribute('src') != '':
+            images_counter += 1
+        expect(images[i].get_attribute('src') != '', 'Pet has no picture')
+        expect(names[i].text != '', 'Empty name field')
+        expect(breeds[i].text != '', 'Empty name field')
+        expect(ages[i].text != '', 'Empty age field')
 
-    def post_add_new_pet(self, auth_key: json, name: str, animal_type: str, age: str, pet_photo: str):
-        data = MultipartEncoder(
-            fields={
-                'name': name,
-                'animal_type': animal_type,
-                'age': age,
-                'pet_photo': (pet_photo, open(pet_photo, 'rb'), 'image/jpeg')
-            })
-        headers = {'auth_key': auth_key['key'], 'Content-Type': data.content_type}
+   
+    pet_number_stat = test.find_elements_by_xpath("/html/body/div[1]//div[@class='.col-sm-4 left']")
+    expect((int(pet_number_stat[0].text.split("\n")[1].split(" ")[1])) == pet_number, 'Not all pets are displayed on '
+                                                                                      'the page')
 
-        res = requests.post(self.base_url + 'api/pets/', headers=headers, data=data)
+  
+    expect(images_counter >= pet_number / 2, 'Less then a half of pets has photo number')
 
-        status = res.status_code
-        result = ""
-        try:
-            result = res.json()
-        except json.decoder.JSONDecodeError:
-            result = res.text
-        print(result)
-        return status, result
+    
+    expect(len(names) == len(names_set), 'Match of pet names')
 
-    def delete_pet(self, auth_key: json, pet_id: str) -> json:
-        headers = {'auth_key': auth_key['key']}
-        res = requests.delete(self.base_url + 'api/pets/' + pet_id, headers=headers)
-        status = res.status_code
-        result = ""
-        try:
-            result = res.json()
-        except json.decoder.JSONDecodeError:
-            result = res.text
-        return status, result
+    
+    expect(pet_number == len(pets_list), 'Not all of pets has different set of name, breed and age')
 
-    def put_update_info_about_pet(self, auth_key: json, pet_id: str,  name: str, animal_type: str, age: str):
-        headers = {'auth_key': auth_key['key']}
-        data = {
-            'name': name,
-            'age': age,
-            'animal_type': animal_type
-        }
-        res = requests.put(self.base_url + 'api/pets/' + pet_id, headers=headers, data=data)
-        status = res.status_code
-        result = ""
-        try:
-            result = res.json()
-        except json.decoder.JSONDecodeError:
-            result = res.text
-        return status, result
-
-    def post_add_new_pet_without_photo(self, auth_key: json, name: str, animal_type: str, age: str,):
-        headers = {'auth_key': auth_key['key']}
-        data = {
-            'name': name,
-            'animal_type': animal_type,
-            'age': age
-        }
-        res = requests.post(self.base_url + 'api/create_pet_simple', headers=headers, data=data)
-
-        status = res.status_code
-        result = ""
-        try:
-            result = res.json()
-        except json.decoder.JSONDecodeError:
-            result = res.text
-        print(result)
-        return status, result
-
-    def post_add_photo_of_a_pet(self, auth_key: json, pet_id: str, pet_photo: str):
-        data = MultipartEncoder(
-            fields={
-                'pet_photo': (pet_photo, open(pet_photo, 'rb'), 'image/jpg')
-            })
-        headers = {'auth_key': auth_key['key'], 'Content-Type': data.content_type}
-
-        res = requests.post(self.base_url + f'api/pets/set_photo/{pet_id}', headers=headers, data=data)
-
-        status = res.status_code
-        result = ""
-        try:
-            result = res.json()
-        except json.decoder.JSONDecodeError:
-            result = res.text
-        print(result)
-        return status, result
+    assert_expectations()
